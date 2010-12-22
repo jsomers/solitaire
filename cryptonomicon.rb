@@ -1,6 +1,9 @@
 # A Ruby implementation of Schneier's Solitaire encryption algorithm from Neal
 # Stephenson's novel, Cryptonomicon. See http://www.schneier.com/solitaire.html.
 
+require 'rubygems'
+require 'highline/import'
+
 class Array
   def shuffle
     return sort_by { rand }
@@ -93,6 +96,7 @@ class String
     dck.stream(letters.length) {|l| s += letters.shift.xor(l)}
     return s.blocks
   end
+
 end
 
 def deck
@@ -112,19 +116,72 @@ def val(card)
   end
 end
 
-puts "Sample 1:"
-outs = []
-deck.stream(10) {|x| outs << x}
-p outs # raw numerical output
+# Verify that Scheiner's examples work:
+#puts "Sample 1:"
+#outs = []
+#deck.stream(10) {|x| outs << x}
+#p outs # raw numerical output
+#
+#p ("A" * 10).encrypt(deck) # ciphered
+#
+#puts "\nSample 2:"
+#outs = []
+#deck.key("FOO").stream(15) {|x| outs << x}
+#p outs
+#
+#p ("A" * 15).encrypt( deck.key("FOO") )
+#
+#puts "\nSample 3:"
+#p "SOLITAIRE".encrypt( deck.key("CRYPTONOMICON") )
 
-p ("A" * 10).encrypt(deck) # ciphered
 
-puts "\nSample 2:"
-outs = []
-deck.key("FOO").stream(15) {|x| outs << x}
-p outs
+# Encrypt text as you type
 
-p ("A" * 15).encrypt( deck.key("FOO") )
+class HighLine
+	public :get_character
+end
 
-puts "\nSample 3:"
-p "SOLITAIRE".encrypt( deck.key("CRYPTONOMICON") )
+input = HighLine.new
+
+key = input.ask("Encryption key: ") {|q| q.echo = "*"}
+i = -1
+
+cpher = ""
+dck = deck.key(key.upcase)
+print "Message: "
+while (c = input.get_character) != "\e" do
+  begin
+    i += 1
+    if i % 5 == 0 and i > 0 then print " " end
+    dck = dck.solitaire
+    x = val( dck[val(dck.first)] )
+    cph = c.chr.upcase.xor(x)
+    cpher += cph
+	  print cph
+	  
+  rescue
+    break
+  end
+end
+
+# Send an e-mail
+from = input.ask("\nFrom: ")
+password = input.ask("Password: ") {|q| q.echo = "*"}
+recipient = input.ask("To: ")
+
+require 'tlsmail'  
+require 'time'  
+  
+content = <<EOF  
+From: #{from}
+To: #{recipient}
+Subject: [encrypted message]
+Date: #{Time.now.rfc2822} 
+  
+#{cpher.blocks}
+EOF
+
+Net::SMTP.enable_tls(OpenSSL::SSL::VERIFY_NONE)  
+Net::SMTP.start('smtp.gmail.com', 587, 'gmail.com', from, password, :login) do |smtp|  
+  smtp.send_message(content, from, recipient)  
+end
